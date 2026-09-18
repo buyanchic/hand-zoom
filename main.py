@@ -1,4 +1,3 @@
-
 import cv2
 import mediapipe as mp
 import math
@@ -10,11 +9,11 @@ import numpy as np
 
 IMAGE_PATH = "image.jpg"
 
-WINDOW_WIDTH = 800
-WINDOW_HEIGHT = 600
-
 MIN_ZOOM = 0.5
 MAX_ZOOM = 2.5
+
+SCREEN_WIDTH = 1920
+SCREEN_HEIGHT = 1080
 
 
 # ==========================================
@@ -54,15 +53,11 @@ if not cap.isOpened():
     exit()
 
 
-# ==========================================
-# ТЕКУЩИЙ ZOOM
-# ==========================================
-
 zoom = 1.0
 
 
 # ==========================================
-# ФУНКЦИЯ РАССТОЯНИЯ
+# РАССТОЯНИЕ МЕЖДУ ТОЧКАМИ
 # ==========================================
 
 def distance(point1, point2):
@@ -73,48 +68,66 @@ def distance(point1, point2):
 
 
 # ==========================================
-# ОТОБРАЖЕНИЕ ИЗОБРАЖЕНИЯ
+# ПОКАЗ ИЗОБРАЖЕНИЯ
 # ==========================================
 
 def show_image(image, zoom):
 
-    new_width = int(image.shape[1] * zoom)
-    new_height = int(image.shape[0] * zoom)
+    image_height, image_width = image.shape[:2]
+
+    # Базовый масштаб:
+    # картинка полностью помещается на экран
+    base_scale = min(
+        SCREEN_WIDTH / image_width,
+        SCREEN_HEIGHT / image_height
+    )
+
+    # Добавляем пользовательский zoom
+    scale = base_scale * zoom
+
+    new_width = int(image_width * scale)
+    new_height = int(image_height * scale)
 
     scaled = cv2.resize(
         image,
         (new_width, new_height)
     )
 
-    # Белый фон
+    # Белый фон экрана
     display = np.ones(
-        (WINDOW_HEIGHT, WINDOW_WIDTH, 3),
+        (SCREEN_HEIGHT, SCREEN_WIDTH, 3),
         dtype=np.uint8
     ) * 255
 
     h, w = scaled.shape[:2]
 
-    # Центр изображения
-    x = (WINDOW_WIDTH - w) // 2
-    y = (WINDOW_HEIGHT - h) // 2
+    # ======================================
+    # КАРТИНКА МЕНЬШЕ ЭКРАНА
+    # ======================================
 
-    # Если изображение меньше окна
-    if w <= WINDOW_WIDTH and h <= WINDOW_HEIGHT:
+    if w <= SCREEN_WIDTH and h <= SCREEN_HEIGHT:
+
+        x = (SCREEN_WIDTH - w) // 2
+        y = (SCREEN_HEIGHT - h) // 2
 
         display[
             y:y + h,
             x:x + w
         ] = scaled
 
+    # ======================================
+    # КАРТИНКА БОЛЬШЕ ЭКРАНА
+    # ======================================
+
     else:
 
-        # Центрированный crop
-        crop_x = max(0, (w - WINDOW_WIDTH) // 2)
-        crop_y = max(0, (h - WINDOW_HEIGHT) // 2)
+        # Берём центральную часть
+        x = max(0, (w - SCREEN_WIDTH) // 2)
+        y = max(0, (h - SCREEN_HEIGHT) // 2)
 
         crop = scaled[
-            crop_y:crop_y + WINDOW_HEIGHT,
-            crop_x:crop_x + WINDOW_WIDTH
+            y:y + SCREEN_HEIGHT,
+            x:x + SCREEN_WIDTH
         ]
 
         display[
@@ -123,6 +136,22 @@ def show_image(image, zoom):
         ] = crop
 
     return display
+
+
+# ==========================================
+# ПОЛНОЭКРАННОЕ ОКНО
+# ==========================================
+
+cv2.namedWindow(
+    "Image Zoom",
+    cv2.WINDOW_NORMAL
+)
+
+cv2.setWindowProperty(
+    "Image Zoom",
+    cv2.WND_PROP_FULLSCREEN,
+    cv2.WINDOW_FULLSCREEN
+)
 
 
 # ==========================================
@@ -137,7 +166,7 @@ while True:
         print("Не удалось получить кадр")
         break
 
-    # Зеркальное отображение
+    # Зеркальное отображение камеры
     frame = cv2.flip(frame, 1)
 
     # BGR -> RGB
@@ -146,46 +175,36 @@ while True:
         cv2.COLOR_BGR2RGB
     )
 
-    # Распознаём руки
     result = hands.process(rgb)
 
     # ======================================
-    # ЕСЛИ ЕСТЬ РУКИ
+    # ЕСЛИ НАШЛИ РУКИ
     # ======================================
 
     if result.multi_hand_landmarks:
 
         detected_hands = result.multi_hand_landmarks
 
-        # ==================================
-        # ДВЕ РУКИ
-        # ==================================
-
         if len(detected_hands) == 2:
 
             hand1 = detected_hands[0]
             hand2 = detected_hands[1]
 
-            landmarks1 = hand1.landmark
-            landmarks2 = hand2.landmark
-
-            # Центры ладоней
-            palm1 = landmarks1[
+            palm1 = hand1.landmark[
                 mp_hands.HandLandmark.WRIST
             ]
 
-            palm2 = landmarks2[
+            palm2 = hand2.landmark[
                 mp_hands.HandLandmark.WRIST
             ]
 
-            # Расстояние между ладонями
             hand_distance = distance(
                 palm1,
                 palm2
             )
 
-            # Преобразуем расстояние рук
-            # в zoom
+            # Расстояние между руками
+            # превращаем в zoom
 
             zoom = np.interp(
                 hand_distance,
@@ -193,7 +212,6 @@ while True:
                 [MIN_ZOOM, MAX_ZOOM]
             )
 
-            # Рисуем обе руки
             mp_draw.draw_landmarks(
                 frame,
                 hand1,
@@ -206,7 +224,6 @@ while True:
                 mp_hands.HAND_CONNECTIONS
             )
 
-            # Показываем режим
             cv2.putText(
                 frame,
                 "TWO HANDS",
@@ -216,20 +233,6 @@ while True:
                 (0, 255, 0),
                 2
             )
-
-            cv2.putText(
-                frame,
-                f"Distance: {hand_distance:.2f}",
-                (20, 80),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (0, 255, 0),
-                2
-            )
-
-        # ==================================
-        # ОДНА РУКА
-        # ==================================
 
         else:
 
@@ -241,7 +244,6 @@ while True:
                 mp_hands.HandLandmark.WRIST
             ]
 
-            # Кончики пальцев
             fingertips = [
                 mp_hands.HandLandmark.THUMB_TIP,
                 mp_hands.HandLandmark.INDEX_FINGER_TIP,
@@ -249,9 +251,6 @@ while True:
                 mp_hands.HandLandmark.RING_FINGER_TIP,
                 mp_hands.HandLandmark.PINKY_TIP,
             ]
-
-            # Среднее расстояние
-            # от пальцев до запястья
 
             avg_distance = sum(
                 distance(
@@ -261,30 +260,25 @@ while True:
                 for finger in fingertips
             ) / len(fingertips)
 
-            # Кулак
             if avg_distance < 0.35:
 
                 zoom -= 0.02
 
-            # Открытая ладонь
             elif avg_distance > 0.55:
 
                 zoom += 0.02
 
-            # Ограничиваем zoom
             zoom = max(
                 MIN_ZOOM,
                 min(MAX_ZOOM, zoom)
             )
 
-            # Рисуем руку
             mp_draw.draw_landmarks(
                 frame,
                 hand,
                 mp_hands.HAND_CONNECTIONS
             )
 
-            # Показываем режим
             cv2.putText(
                 frame,
                 "ONE HAND",
@@ -295,24 +289,14 @@ while True:
                 2
             )
 
-            cv2.putText(
-                frame,
-                f"Hand: {avg_distance:.2f}",
-                (20, 80),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (0, 255, 0),
-                2
-            )
-
     # ======================================
-    # ZOOM НА ЭКРАНЕ
+    # ИНФОРМАЦИЯ О ZOOM
     # ======================================
 
     cv2.putText(
         frame,
         f"Zoom: {zoom:.2f}x",
-        (20, 120),
+        (20, 80),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.8,
         (0, 255, 0),
@@ -320,7 +304,7 @@ while True:
     )
 
     # ======================================
-    # ПОКАЗЫВАЕМ ИЗОБРАЖЕНИЕ
+    # ПОКАЗЫВАЕМ КАРТИНКУ
     # ======================================
 
     display = show_image(
@@ -329,23 +313,19 @@ while True:
     )
 
     cv2.imshow(
-        "Camera",
-        frame
-    )
-
-    cv2.imshow(
         "Image Zoom",
         display
     )
 
-    # ESC = выход
+    # Окно камеры
+    cv2.imshow(
+        "Camera",
+        frame
+    )
+
+    # ESC -> выход
     if cv2.waitKey(1) & 0xFF == 27:
         break
-
-
-# ==========================================
-# ЗАВЕРШЕНИЕ
-# ==========================================
 
 cap.release()
 hands.close()
