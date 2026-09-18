@@ -3,33 +3,16 @@ import mediapipe as mp
 import math
 import numpy as np
 
-# ==========================================
-# НАСТРОЙКИ
-# ==========================================
+from show_image import show_image
 
-IMAGE_PATH = "image.jpg"
+from constants import MIN_ZOOM, MAX_ZOOM, IMAGE_PATH
 
-MIN_ZOOM = 0.5
-MAX_ZOOM = 2.5
-
-SCREEN_WIDTH = 1920
-SCREEN_HEIGHT = 1080
-
-
-# ==========================================
-# ЗАГРУЗКА ИЗОБРАЖЕНИЯ
-# ==========================================
-
+# загрузка изображения
 image = cv2.imread(IMAGE_PATH)
 
 if image is None:
     print("Ошибка: не найден файл image.jpg")
     exit()
-
-
-# ==========================================
-# MEDIAPIPE
-# ==========================================
 
 mp_hands = mp.solutions.hands
 mp_draw = mp.solutions.drawing_utils
@@ -41,101 +24,22 @@ hands = mp_hands.Hands(
     min_tracking_confidence=0.5,
 )
 
-
-# ==========================================
-# КАМЕРА
-# ==========================================
-
+# камера
 cap = cv2.VideoCapture(0)
 
 if not cap.isOpened():
     print("Ошибка: камера не открылась")
     exit()
 
-
 zoom = 1.0
 
-
-# ==========================================
-# РАССТОЯНИЕ МЕЖДУ ТОЧКАМИ
-# ==========================================
-
+# расстояние между точками
 def distance(point1, point2):
     return math.sqrt(
         (point1.x - point2.x) ** 2 +
         (point1.y - point2.y) ** 2
     )
 
-
-# ==========================================
-# ПОКАЗ ИЗОБРАЖЕНИЯ
-# ==========================================
-
-def show_image(image, zoom):
-
-    image_height, image_width = image.shape[:2]
-
-    # Базовый масштаб:
-    # картинка полностью помещается на экран
-    base_scale = min(
-        SCREEN_WIDTH / image_width,
-        SCREEN_HEIGHT / image_height
-    )
-
-    # Добавляем пользовательский zoom
-    scale = base_scale * zoom
-
-    new_width = int(image_width * scale)
-    new_height = int(image_height * scale)
-
-    scaled = cv2.resize(
-        image,
-        (new_width, new_height)
-    )
-
-    # Белый фон экрана
-    display = np.ones(
-        (SCREEN_HEIGHT, SCREEN_WIDTH, 3),
-        dtype=np.uint8
-    ) * 255
-
-    h, w = scaled.shape[:2]
-
-    # ======================================
-    # КАРТИНКА МЕНЬШЕ ЭКРАНА
-    # ======================================
-
-    if w <= SCREEN_WIDTH and h <= SCREEN_HEIGHT:
-
-        x = (SCREEN_WIDTH - w) // 2
-        y = (SCREEN_HEIGHT - h) // 2
-
-        display[
-            y:y + h,
-            x:x + w
-        ] = scaled
-
-    # ======================================
-    # КАРТИНКА БОЛЬШЕ ЭКРАНА
-    # ======================================
-
-    else:
-
-        # Берём центральную часть
-        x = max(0, (w - SCREEN_WIDTH) // 2)
-        y = max(0, (h - SCREEN_HEIGHT) // 2)
-
-        crop = scaled[
-            y:y + SCREEN_HEIGHT,
-            x:x + SCREEN_WIDTH
-        ]
-
-        display[
-            :crop.shape[0],
-            :crop.shape[1]
-        ] = crop
-
-    return display
 
 
 # ==========================================
@@ -177,10 +81,7 @@ while True:
 
     result = hands.process(rgb)
 
-    # ======================================
-    # ЕСЛИ НАШЛИ РУКИ
-    # ======================================
-
+    # если нашлись руки
     if result.multi_hand_landmarks:
 
         detected_hands = result.multi_hand_landmarks
@@ -289,9 +190,7 @@ while True:
                 2
             )
 
-    # ======================================
-    # ИНФОРМАЦИЯ О ZOOM
-    # ======================================
+    # информация о зуме
 
     cv2.putText(
         frame,
@@ -303,10 +202,7 @@ while True:
         2
     )
 
-    # ======================================
-    # ПОКАЗЫВАЕМ КАРТИНКУ
-    # ======================================
-
+    # показываем картинку
     display = show_image(
         image,
         zoom
